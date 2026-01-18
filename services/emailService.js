@@ -1,14 +1,38 @@
 const nodemailer = require("nodemailer");
 
+/**
+ * IMPORTANT:
+ * - Do NOT use `service: "gmail"`
+ * - Port MUST be number
+ * - secure MUST be false for 587
+ */
+
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false,
+  host: process.env.EMAIL_HOST, // smtp.gmail.com
+  port: Number(process.env.EMAIL_PORT), // 587
+  secure: false, // MUST be false for 587
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    pass: process.env.EMAIL_PASS, // App Password
   },
+  connectionTimeout: 20_000, // 20 seconds
+  greetingTimeout: 20_000,
+  socketTimeout: 20_000,
 });
+
+/**
+ * Verify SMTP connection ONCE at startup
+ */
+(async () => {
+  try {
+    await transporter.verify();
+    console.log("✅ SMTP server is ready to send emails");
+  } catch (err) {
+    console.error("❌ SMTP connection failed:", err.message);
+  }
+})();
+
+/* ================= CONFIRMATION EMAIL ================= */
 
 const sendConfirmationEmail = async (to, name, portalLink) => {
   const mailOptions = {
@@ -18,32 +42,24 @@ const sendConfirmationEmail = async (to, name, portalLink) => {
     html: `
       <!DOCTYPE html>
       <html>
-      <head>
-        <style>
-          body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-          .content { padding: 40px 30px; }
-          .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 20px 0; }
-          .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 14px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
+      <body style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
+        <div style="max-width:600px;margin:auto;background:#fff;border-radius:10px;overflow:hidden;">
+          <div style="background:#667eea;color:#fff;padding:30px;text-align:center;">
             <h1>🎉 Welcome, ${name}!</h1>
             <p>Your registration is confirmed</p>
           </div>
-          <div class="content">
-            <p>Thank you for registering for our event! We're excited to have you join us.</p>
-            <p>Access your personal event portal to view exclusive content:</p>
-            <center>
-              <a href="${portalLink}" class="button">Access Event Portal</a>
-            </center>
-            <p>If the button doesn't work, copy this link:<br><small>${portalLink}</small></p>
+          <div style="padding:30px;">
+            <p>Thank you for registering for our event.</p>
+            <p>Click below to access your portal:</p>
+            <div style="text-align:center;margin:30px 0;">
+              <a href="${portalLink}" style="background:#667eea;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;">
+                Access Event Portal
+              </a>
+            </div>
+            <p style="font-size:12px;color:#666;">${portalLink}</p>
           </div>
-          <div class="footer">
-            <p>Questions? Reply to this email for support.</p>
+          <div style="background:#f8f9fa;padding:15px;text-align:center;font-size:13px;color:#777;">
+            Event App Support
           </div>
         </div>
       </body>
@@ -53,6 +69,8 @@ const sendConfirmationEmail = async (to, name, portalLink) => {
 
   await transporter.sendMail(mailOptions);
 };
+
+/* ================= OTP EMAIL ================= */
 
 const sendOTPEmail = async (to, otp) => {
   const mailOptions = {
@@ -62,29 +80,20 @@ const sendOTPEmail = async (to, otp) => {
     html: `
       <!DOCTYPE html>
       <html>
-      <head>
-        <style>
-          body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-          .content { padding: 40px 30px; text-align: center; }
-          .otp-code { font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #667eea; background: #f0f4ff; padding: 20px 40px; border-radius: 12px; display: inline-block; margin: 20px 0; }
-          .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 14px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
+      <body style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
+        <div style="max-width:600px;margin:auto;background:#fff;border-radius:10px;overflow:hidden;">
+          <div style="background:#667eea;color:#fff;padding:30px;text-align:center;">
             <h1>🔐 Login Code</h1>
           </div>
-          <div class="content">
-            <p>Use this code to log in to your event portal:</p>
-            <div class="otp-code">${otp}</div>
+          <div style="padding:30px;text-align:center;">
+            <p>Your OTP code:</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#667eea;margin:20px 0;">
+              ${otp}
+            </div>
             <p>This code expires in 10 minutes.</p>
-            <p style="color: #999; font-size: 14px;">If you didn't request this, please ignore this email.</p>
           </div>
-          <div class="footer">
-            <p>Event App - Your Event Portal</p>
+          <div style="background:#f8f9fa;padding:15px;text-align:center;font-size:13px;color:#777;">
+            Event App
           </div>
         </div>
       </body>
@@ -95,4 +104,7 @@ const sendOTPEmail = async (to, otp) => {
   await transporter.sendMail(mailOptions);
 };
 
-module.exports = { sendConfirmationEmail, sendOTPEmail };
+module.exports = {
+  sendConfirmationEmail,
+  sendOTPEmail,
+};
