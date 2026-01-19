@@ -25,10 +25,10 @@ const getTransporter = () => {
       maxMessages: 100,
       rateDelta: 1000,
       rateLimit: 10,
-      // Add timeout settings
-      connectionTimeout: 10000, // 10 seconds
-      greetingTimeout: 10000,
-      socketTimeout: 30000,
+      // Increased timeout settings for slower connections
+      connectionTimeout: 60000, // 60 seconds
+      greetingTimeout: 30000,
+      socketTimeout: 60000,
     });
 
     // Verify transporter on first creation

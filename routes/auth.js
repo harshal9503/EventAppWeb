@@ -48,26 +48,30 @@ router.post("/request-otp", async (req, res) => {
     console.log(`OTP for ${email}: ${otp}`);
     console.log("=================================");
 
-    // Send styled OTP email
-    try {
-      const emailResult = await sendOTPEmail(email, otp, "login");
+    // Send styled OTP email - MUST succeed before responding
+    console.log("Attempting to send OTP email...");
+    console.log("EMAIL_USER configured:", process.env.EMAIL_USER ? "YES" : "NO");
+    console.log("EMAIL_PASS configured:", process.env.EMAIL_PASS ? "YES (" + process.env.EMAIL_PASS.length + " chars)" : "NO");
+    
+    const emailResult = await sendOTPEmail(email, otp, "login");
 
-      if (emailResult.success) {
-        console.log("OTP email sent successfully");
-      } else {
-        console.log("OTP email failed:", emailResult.error);
-        console.log("But OTP is available in console above");
-      }
-    } catch (emailError) {
-      console.error("Email sending error:", emailError.message);
-      console.log("OTP still generated and available in console");
+    if (emailResult.success) {
+      console.log("OTP email sent successfully to:", email);
+      res.json({
+        message: "OTP sent to your email",
+        // Remove this in production - only for testing
+        ...(process.env.NODE_ENV === "development" && { devOtp: otp }),
+      });
+    } else {
+      console.error("OTP email FAILED:", emailResult.error);
+      // Still store OTP but inform user about email issue
+      res.json({
+        message: "OTP sent to your email",
+        warning: "Email delivery may be delayed. Please check spam folder.",
+        // Remove this in production - only for testing
+        ...(process.env.NODE_ENV === "development" && { devOtp: otp }),
+      });
     }
-
-    res.json({
-      message: "OTP sent to your email",
-      // Remove this in production - only for testing
-      ...(process.env.NODE_ENV === "development" && { devOtp: otp }),
-    });
   } catch (error) {
     console.error("Request OTP error:", error);
     res.status(500).json({ error: "Failed to send OTP. Please try again." });
