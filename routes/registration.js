@@ -48,12 +48,17 @@ router.post("/", validationRules, async (req, res) => {
     });
 
     await registration.save();
+    console.log("Registration saved for:", email);
 
-    // Send confirmation email (fire and forget - don't await)
-    const portalLink = `${process.env.FRONTEND_URL}/portal?email=${encodeURIComponent(email)}`;
-    sendConfirmationEmail(email, name, portalLink).catch((err) => {
-      console.error("Email failed (non-blocking):", err.message);
-    });
+    // Send confirmation email
+    const portalLink = `${process.env.FRONTEND_URL}/portal/login`;
+
+    try {
+      const emailResult = await sendConfirmationEmail(email, name, portalLink);
+      console.log("Email send result:", emailResult);
+    } catch (emailErr) {
+      console.error("Email error (non-blocking):", emailErr.message);
+    }
 
     res.status(201).json({
       message: "Registration successful! Check your email for portal access.",

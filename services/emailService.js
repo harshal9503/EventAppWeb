@@ -62,11 +62,14 @@ const sendConfirmationEmail = async (email, name, portalLink) => {
     </html>
   `;
 
-  return await sendEmail({
+  const result = await sendEmail({
     email,
     subject: "Registration Confirmed - Welcome to Our Event!",
     html,
   });
+
+  console.log("Confirmation email result:", result);
+  return result;
 };
 
 module.exports = { sendConfirmationEmail, sendEmail };

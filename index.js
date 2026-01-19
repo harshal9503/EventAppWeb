@@ -5,17 +5,12 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const helmet = require("helmet");
 
-// Log environment check
+// Debug environment variables
 console.log("=== SERVER STARTING ===");
-console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("PORT:", process.env.PORT || 5000);
-console.log("RESEND_API_KEY exists:", !!process.env.RESEND_API_KEY);
-console.log(
-  "RESEND_API_KEY value:",
-  process.env.RESEND_API_KEY
-    ? process.env.RESEND_API_KEY.substring(0, 12) + "..."
-    : "MISSING",
-);
+console.log("EMAIL_USER:", process.env.EMAIL_USER || "NOT SET");
+console.log("EMAIL_PASS:", process.env.EMAIL_PASS ? "SET" : "NOT SET");
+console.log("MONGODB_URI:", process.env.MONGODB_URI ? "SET" : "NOT SET");
 
 const app = express();
 
@@ -51,7 +46,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-// Connect to MongoDB and start server
+// Connect and start
 const PORT = process.env.PORT || 5000;
 
 mongoose
