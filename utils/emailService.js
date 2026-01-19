@@ -9,21 +9,45 @@ console.log(
     : "NOT SET",
 );
 
-// Create transporter with proper settings
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    pool: true,
-    maxConnections: 3,
-    rateDelta: 20000,
-    rateLimit: 5,
-  });
+// Create a reusable transporter with proper Gmail settings
+let transporter = null;
+
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      service: "gmail", // Use Gmail service for simpler config
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS, // Must be an App Password, not regular password
+      },
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      rateDelta: 1000,
+      rateLimit: 10,
+      // Add timeout settings
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
+    });
+
+    // Verify transporter on first creation
+    transporter.verify((error, success) => {
+      if (error) {
+        console.error("=== SMTP CONNECTION ERROR ===");
+        console.error("Error:", error.message);
+        console.error(
+          "Tip: Make sure you're using a Gmail App Password, not your regular password.",
+        );
+        console.error(
+          "Generate one at: https://myaccount.google.com/apppasswords",
+        );
+      } else {
+        console.log("=== SMTP SERVER READY ===");
+      }
+    });
+  }
+  return transporter;
 };
 
 const generateOTPEmailTemplate = (otp, type = "login") => {
@@ -59,15 +83,16 @@ const sendEmail = async (options) => {
 
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.error("=== EMAIL ERROR: CREDENTIALS MISSING ===");
+    console.error("Set EMAIL_USER and EMAIL_PASS in your .env file");
     return { success: false, error: "Email credentials missing" };
   }
 
   try {
-    const transporter = createTransporter();
+    const transport = getTransporter();
 
-    console.log("Created transporter, sending...");
+    console.log("Sending email...");
 
-    const info = await transporter.sendMail({
+    const info = await transport.sendMail({
       from: `"Event App" <${process.env.EMAIL_USER}>`,
       to: options.email,
       subject: options.subject,
@@ -78,14 +103,28 @@ const sendEmail = async (options) => {
     console.log("Message ID:", info.messageId);
     console.log("Response:", info.response);
 
-    // Close the transporter
-    transporter.close();
-
     return { success: true, data: info };
   } catch (error) {
     console.error("=== EMAIL FAILED ===");
     console.error("Error Code:", error.code);
     console.error("Error Message:", error.message);
+
+    // Provide helpful error messages
+    if (error.code === "EAUTH") {
+      console.error("Authentication failed. Please check:");
+      console.error("1. EMAIL_USER is your full Gmail address");
+      console.error(
+        "2. EMAIL_PASS is a 16-character App Password (not your regular password)",
+      );
+      console.error(
+        "3. Generate App Password at: https://myaccount.google.com/apppasswords",
+      );
+    } else if (error.code === "ESOCKET" || error.code === "ECONNECTION") {
+      console.error(
+        "Connection failed. Check your network and firewall settings.",
+      );
+    }
+
     return { success: false, error: error.message };
   }
 };

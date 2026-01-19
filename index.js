@@ -31,9 +31,11 @@ app.use(express.json());
 // Routes
 const registrationRoutes = require("./routes/registration");
 const authRoutes = require("./routes/auth");
+const adminRoutes = require("./routes/admin");
 
 app.use("/api/registration", registrationRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

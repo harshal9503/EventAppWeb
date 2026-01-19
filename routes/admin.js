@@ -1,5 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 const Admin = require("../models/Admin");
 const Registration = require("../models/Registration");
 const LoginLog = require("../models/LoginLog");
@@ -12,20 +13,31 @@ const router = express.Router();
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log("Admin login attempt:", email);
 
     const admin = await Admin.findOne({ email: email.toLowerCase() });
-    if (!admin || !(await admin.comparePassword(password))) {
+    if (!admin) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const token = jwt.sign(
       { id: admin._id, email: admin.email },
       process.env.JWT_ADMIN_SECRET,
-      { expiresIn: "8h" },
+      { expiresIn: "24h" },
     );
 
-    res.json({ token, admin: { name: admin.name, email: admin.email } });
+    res.json({
+      message: "Login successful",
+      token,
+      admin: { name: admin.name, email: admin.email },
+    });
   } catch (error) {
+    console.error("Admin login error:", error);
     res.status(500).json({ error: "Login failed" });
   }
 });
@@ -49,95 +61,13 @@ router.post("/create", async (req, res) => {
   }
 });
 
-// Get registrations
+// Get all registrations
 router.get("/registrations", authenticateAdmin, async (req, res) => {
   try {
-    const {
-      search,
-      ticketType,
-      gender,
-      startDate,
-      endDate,
-      page = 1,
-      limit = 20,
-    } = req.query;
-
-    const query = {};
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    if (ticketType) query.ticketType = ticketType;
-    if (gender) query.gender = gender;
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
-    }
-
-    const total = await Registration.countDocuments(query);
-    const registrations = await Registration.find(query)
-      .select("-otpCode -otpExpiry")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-
-    res.json({
-      registrations,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit),
-      },
-    });
+    const registrations = await Registration.find().sort({ createdAt: -1 });
+    res.json(registrations);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch registrations" });
-  }
-});
-
-// Export registrations as CSV
-router.get("/registrations/export", authenticateAdmin, async (req, res) => {
-  try {
-    const registrations = await Registration.find({})
-      .select("-otpCode -otpExpiry")
-      .sort({ createdAt: -1 });
-
-    const csv = [
-      [
-        "Name",
-        "Email",
-        "Phone",
-        "Gender",
-        "Ticket Type",
-        "Status",
-        "Registered At",
-      ].join(","),
-      ...registrations.map((r) =>
-        [
-          `"${r.name}"`,
-          r.email,
-          r.phone,
-          r.gender,
-          r.ticketType,
-          r.status,
-          r.createdAt.toISOString(),
-        ].join(","),
-      ),
-    ].join("\n");
-
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=registrations.csv",
-    );
-    res.send(csv);
-  } catch (error) {
-    res.status(500).json({ error: "Export failed" });
   }
 });
 
