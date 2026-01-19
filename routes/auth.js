@@ -1,7 +1,7 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const Registration = require("../models/Registration");
-const sendEmail = require("../utils/emailService");
+const { sendOTPEmail } = require("../utils/emailService");
 
 const router = express.Router();
 
@@ -10,14 +10,14 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Store OTPs temporarily
+// Store OTPs temporarily (in production, use Redis)
 const otpStore = new Map();
 
 // Request OTP
 router.post("/request-otp", async (req, res) => {
   try {
-    console.log("=== REQUEST OTP ===");
     const { email } = req.body;
+    console.log("=== REQUEST OTP ===");
     console.log("Email:", email);
 
     if (!email) {
@@ -27,6 +27,7 @@ router.post("/request-otp", async (req, res) => {
     // Check if user exists
     const user = await Registration.findOne({ email: email.toLowerCase() });
     if (!user) {
+      console.log("User not found:", email);
       return res.status(404).json({ error: "Email not registered" });
     }
 
@@ -42,72 +43,95 @@ router.post("/request-otp", async (req, res) => {
     // Store OTP
     otpStore.set(email.toLowerCase(), { otp, expiresAt });
 
-    // Log OTP to console (visible in Render logs)
-    console.log("========================================");
+    // Always log OTP for development/testing
+    console.log("=================================");
     console.log(`OTP for ${email}: ${otp}`);
-    console.log("========================================");
+    console.log("=================================");
 
-    // Try to send email (non-blocking)
-    sendEmail({
-      email: email,
-      subject: "Your Login OTP",
-      html: `<div style="font-family: Arial; padding: 20px;">
-        <h2>Login OTP</h2>
-        <p>Your OTP is: <strong style="font-size: 24px;">${otp}</strong></p>
-        <p>Valid for 10 minutes.</p>
-      </div>`,
-    }).catch((err) => console.log("Email failed:", err.message));
+    // Send styled OTP email
+    try {
+      const emailResult = await sendOTPEmail(email, otp, "login");
 
-    res.json({ message: "OTP sent to your email" });
+      if (emailResult.success) {
+        console.log("OTP email sent successfully");
+      } else {
+        console.log("OTP email failed:", emailResult.error);
+        console.log("But OTP is available in console above");
+      }
+    } catch (emailError) {
+      console.error("Email sending error:", emailError.message);
+      console.log("OTP still generated and available in console");
+    }
+
+    res.json({
+      message: "OTP sent to your email",
+      // Remove this in production - only for testing
+      ...(process.env.NODE_ENV === "development" && { devOtp: otp }),
+    });
   } catch (error) {
     console.error("Request OTP error:", error);
-    res.status(500).json({ error: "Failed to send OTP" });
+    res.status(500).json({ error: "Failed to send OTP. Please try again." });
   }
 });
 
 // Verify OTP
 router.post("/verify-otp", async (req, res) => {
   try {
-    console.log("=== VERIFY OTP ===");
     const { email, otp } = req.body;
+    console.log("=== VERIFY OTP ===");
+    console.log("Email:", email, "OTP:", otp);
 
     if (!email || !otp) {
-      return res.status(400).json({ error: "Email and OTP required" });
+      return res.status(400).json({ error: "Email and OTP are required" });
     }
 
     const storedData = otpStore.get(email.toLowerCase());
+    console.log("Stored OTP data:", storedData);
 
     if (!storedData) {
-      return res.status(400).json({ error: "OTP expired or not found" });
+      return res
+        .status(400)
+        .json({ error: "OTP expired or not found. Please request a new one." });
     }
 
     if (Date.now() > storedData.expiresAt) {
       otpStore.delete(email.toLowerCase());
-      return res.status(400).json({ error: "OTP expired" });
+      return res
+        .status(400)
+        .json({ error: "OTP expired. Please request a new one." });
     }
 
     if (storedData.otp !== otp) {
       return res.status(400).json({ error: "Invalid OTP" });
     }
 
+    // OTP verified - clear it
     otpStore.delete(email.toLowerCase());
 
+    // Get user
     const user = await Registration.findOne({ email: email.toLowerCase() });
 
+    // Generate JWT
     const token = jwt.sign(
       { email: user.email, id: user._id },
       process.env.JWT_SECRET,
       { expiresIn: "7d" },
     );
 
+    console.log("Login successful for:", email);
+
     res.json({
       message: "Login successful",
       token,
-      user: { name: user.name, email: user.email, ticketType: user.ticketType },
+      user: {
+        name: user.name,
+        email: user.email,
+        ticketType: user.ticketType,
+      },
     });
   } catch (error) {
     console.error("Verify OTP error:", error);
-    res.status(500).json({ error: "Verification failed" });
+    res.status(500).json({ error: "Verification failed. Please try again." });
   }
 });
 
@@ -115,14 +139,23 @@ router.post("/verify-otp", async (req, res) => {
 router.get("/me", async (req, res) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
-    if (!token) return res.status(401).json({ error: "No token" });
+
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" });
+    }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await Registration.findOne({ email: decoded.email }).select("-__v");
+    const user = await Registration.findOne({ email: decoded.email }).select(
+      "-__v",
+    );
 
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
     res.json(user);
   } catch (error) {
+    console.error("Auth me error:", error);
     res.status(401).json({ error: "Invalid token" });
   }
 });

@@ -18,9 +18,7 @@ const adminSchema = new mongoose.Schema(
       required: true,
     },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
 adminSchema.pre("save", async function (next) {
@@ -30,7 +28,7 @@ adminSchema.pre("save", async function (next) {
 });
 
 adminSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
 module.exports = mongoose.model("Admin", adminSchema);
